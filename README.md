@@ -211,7 +211,8 @@ aria-trl's design prioritizes:
 
 ## Papers & Motivation
 
-- **ARIA**: ["Adaptive Recurrent Intelligence Architecture"](https://github.com/rsd-darshan/ARIA) — continual learning via fast/slow pathways
+- **ARIA** (PyTorch): ["Adaptive Recurrent Intelligence Architecture"](https://github.com/rsd-darshan/ARIA) — core continual learning research, CNNs and task-incremental learning
+- **aria-trl** (TRL): This package — brings ARIA mechanisms to LLM fine-tuning via Hugging Face
 - **NCG**: ["Novelty-triggered Capacity Growth"](https://github.com/rsd-darshan/NCG) — reactive capacity expansion (predecessor)
 - **EWC**: ["Elastic Weight Consolidation"](https://arxiv.org/abs/1612.00796) — standard baseline for catastrophic forgetting
 
