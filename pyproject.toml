@@ -1,0 +1,74 @@
+[build-system]
+requires = ["setuptools>=45", "wheel", "setuptools_scm[toml]>=6.2"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "aria-trl"
+version = "1.0.0"
+description = "Continual learning for LLM fine-tuning via ARIA mechanisms (PlasticityGatedMLP, SPC, Task Adapters)"
+readme = "README.md"
+requires-python = ">=3.10"
+license = {text = "MIT"}
+authors = [
+    {name = "Darshan Poudel", email = "poudeldarshan44@gmail.com"},
+]
+keywords = [
+    "continual-learning",
+    "llm",
+    "fine-tuning",
+    "catastrophic-forgetting",
+    "fast-slow-pathways",
+    "fisher-consolidation",
+]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: Developers",
+    "Intended Audience :: Science/Research",
+    "License :: OSI Approved :: MIT License",
+    "Operating System :: OS Independent",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Topic :: Scientific/Engineering :: Artificial Intelligence",
+]
+
+dependencies = [
+    "torch>=2.0.0",
+    "transformers>=4.30.0",
+    "trl>=0.7.0",
+    "datasets>=2.10.0",
+    "numpy>=1.23.0",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=7.0",
+    "black>=23.0",
+    "isort>=5.12",
+    "mypy>=1.0",
+]
+examples = [
+    "wandb>=0.15.0",
+]
+
+[project.urls]
+Homepage = "https://github.com/rsd-darshan/aria-trl"
+Repository = "https://github.com/rsd-darshan/aria-trl.git"
+Issues = "https://github.com/rsd-darshan/aria-trl/issues"
+
+[tool.setuptools]
+packages = ["aria_trl"]
+
+[tool.black]
+line-length = 88
+target-version = ["py310"]
+
+[tool.isort]
+profile = "black"
+line_length = 88
+
+[tool.mypy]
+python_version = "3.10"
+check_untyped_defs = true
+disallow_incomplete_defs = true
