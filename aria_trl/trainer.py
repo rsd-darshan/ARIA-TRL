@@ -4,17 +4,16 @@ from typing import Optional, Dict, Any, List
 import torch
 import torch.nn as nn
 from torch.utils.data import DataLoader
-from transformers import PreTrainedModel, TrainingArguments
-from trl import SFTTrainer
+from transformers import PreTrainedModel, TrainingArguments, Trainer
 
 from .config import ARIAConfig
 from .modules import PlasticityGatedMLP, TaskFastAdapter
 from .consolidation import FisherConsolidator
 
 
-class ContinualSFTTrainer(SFTTrainer):
+class ContinualSFTTrainer(Trainer):
     """
-    SFTTrainer extended with continual learning via ARIA mechanisms.
+    Trainer extended with continual learning via ARIA mechanisms.
 
     Prevents catastrophic forgetting on sequential tasks through:
     - PlasticityGatedMLP: Dual fast/slow pathways in FFN layers
@@ -22,6 +21,8 @@ class ContinualSFTTrainer(SFTTrainer):
     - Task-Specific Adapters: Per-task lightweight residual modules
     - Asymmetric LR: Slow pathway learns slower (higher stability)
     - Gradient Dampening: Slow grads multiplied by (1-π̄)
+
+    Works with any HF model and is compatible with standard transformers.Trainer.
     """
 
     def __init__(
@@ -53,9 +54,9 @@ class ContinualSFTTrainer(SFTTrainer):
             args=args,
             train_dataset=train_dataset,
             eval_dataset=eval_dataset,
-            tokenizer=tokenizer,
             **kwargs,
         )
+        self.tokenizer = tokenizer
 
         # Parse ARIA config
         if aria_config is None:
@@ -182,13 +183,16 @@ class ContinualSFTTrainer(SFTTrainer):
             else:
                 adapter.freeze()
 
-    def training_step(self, model, inputs):
+    def training_step(self, model, inputs, num_items_in_batch=None):
         """
         Override training step to add gradient dampening.
 
         Called after backward, before optimizer.step().
         """
-        loss = super().training_step(model, inputs)
+        if num_items_in_batch is not None:
+            loss = super().training_step(model, inputs, num_items_in_batch)
+        else:
+            loss = super().training_step(model, inputs)
 
         # Dampen slow-pathway gradients
         self._dampen_slow_gradients()
@@ -208,7 +212,7 @@ class ContinualSFTTrainer(SFTTrainer):
                     if param.grad is not None:
                         param.grad.mul_(mult)
 
-    def compute_loss(self, model, inputs, return_outputs=False):
+    def compute_loss(self, model, inputs, return_outputs=False, num_items_in_batch=None):
         """
         Override loss computation to add ARIA losses.
 
@@ -216,11 +220,19 @@ class ContinualSFTTrainer(SFTTrainer):
         """
         # Base CE loss from SFTTrainer
         if return_outputs:
-            loss, outputs = super().compute_loss(
-                model, inputs, return_outputs=True
-            )
+            if num_items_in_batch is not None:
+                loss, outputs = super().compute_loss(
+                    model, inputs, return_outputs=True, num_items_in_batch=num_items_in_batch
+                )
+            else:
+                loss, outputs = super().compute_loss(
+                    model, inputs, return_outputs=True
+                )
         else:
-            loss = super().compute_loss(model, inputs, return_outputs=False)
+            if num_items_in_batch is not None:
+                loss = super().compute_loss(model, inputs, return_outputs=False, num_items_in_batch=num_items_in_batch)
+            else:
+                loss = super().compute_loss(model, inputs, return_outputs=False)
             outputs = None
 
         # Add plasticity loss from all PlasticityGatedMLP layers

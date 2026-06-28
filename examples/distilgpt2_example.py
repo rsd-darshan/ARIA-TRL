@@ -15,7 +15,7 @@ This demonstrates how ARIA prevents catastrophic forgetting in LLM fine-tuning.
 import torch
 from datasets import Dataset, DatasetDict
 from transformers import (
-    AutoModelForSequenceClassification,
+    AutoModelForCausalLM,
     AutoTokenizer,
     TrainingArguments,
 )
@@ -94,10 +94,7 @@ def main():
     # Load model and tokenizer
     model_name = "distilgpt2"
     tokenizer = AutoTokenizer.from_pretrained(model_name)
-    model = AutoModelForSequenceClassification.from_pretrained(
-        model_name,
-        num_labels=2,  # binary classification for all tasks
-    )
+    model = AutoModelForCausalLM.from_pretrained(model_name)
     tokenizer.pad_token = tokenizer.eos_token
 
     # ARIA configuration
@@ -119,17 +116,11 @@ def main():
     all_task_accuracies = {}
 
     # Training
+    trainer = None
     for task_id, task_name in enumerate(tasks):
         print(f"\n{'='*80}")
         print(f"Task {task_id + 1}/{len(tasks)}: {task_name.upper()}")
         print(f"{'='*80}\n")
-
-        # Add task
-        trainer_task_id = trainer.add_task(task_id) if task_id > 0 else 0
-
-        # Freeze previous task adapters
-        if task_id > 0:
-            trainer.freeze_adapters_except(task_id)
 
         # Get datasets
         train_dataset = task_datasets[task_name]["train"]
@@ -137,12 +128,15 @@ def main():
 
         # Tokenize
         def tokenize_fn(examples):
-            return tokenizer(
+            tokenized = tokenizer(
                 examples["text"],
                 truncation=True,
                 max_length=128,
                 padding="max_length",
             )
+            # For causal LM, labels = input_ids (model will compute language modeling loss)
+            tokenized["labels"] = tokenized["input_ids"].copy()
+            return tokenized
 
         train_dataset = train_dataset.map(
             tokenize_fn,
@@ -165,25 +159,25 @@ def main():
             save_strategy="no",
             logging_steps=10,
             eval_strategy="epoch",
+            report_to=[],
         )
 
-        # Create trainer (first task only, reuse for subsequent)
-        if task_id == 0:
-            trainer = ContinualSFTTrainer(
-                model=model,
-                args=training_args,
-                train_dataset=train_dataset,
-                eval_dataset=eval_dataset,
-                tokenizer=tokenizer,
-                aria_config=aria_config,
-                consolidate_after_task=True,
-                freeze_old_adapters=True,
-            )
-        else:
-            # Update datasets
-            trainer.train_dataset = train_dataset
-            trainer.eval_dataset = eval_dataset
-            trainer.args = training_args
+        # Create new trainer for each task
+        trainer = ContinualSFTTrainer(
+            model=model,
+            args=training_args,
+            train_dataset=train_dataset,
+            eval_dataset=eval_dataset,
+            tokenizer=tokenizer,
+            aria_config=aria_config,
+            consolidate_after_task=True,
+            freeze_old_adapters=True,
+        )
+
+        # Add task and freeze previous adapters
+        trainer_task_id = trainer.add_task(task_id)
+        if task_id > 0:
+            trainer.freeze_adapters_except(task_id)
 
         # Train on this task
         print(f"Training on {task_name}...")
