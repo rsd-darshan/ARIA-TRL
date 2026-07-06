@@ -200,6 +200,29 @@ Gate π:        [routes each token: fast for new patterns, slow for stability]
 Result: Old tasks remain in slow pathway, new tasks learn in fast pathway
 ```
 
+## Benchmark Results
+
+We evaluated aria-trl against standard sequential fine-tuning on a 3-task continual
+learning benchmark: **SST-2 (Movies) → Yelp Review Full (Restaurants) → dair-ai/emotion
+(Social)**, fine-tuning `distilgpt2`, across 3 seeds (42, 123, 7).
+
+<video src="assets/aria_results.mp4" controls muted width="100%">
+  Your browser doesn't support embedded video —
+  <a href="assets/aria_results.mp4">watch/download aria_results.mp4</a> directly.
+</video>
+
+**aria-trl wins on both standard continual-learning metrics:**
+
+| Metric | Standard Fine-Tuning | aria-trl | Delta |
+|---|---|---|---|
+| Average Accuracy (ACC) | 0.5958 ± 0.0136 | **0.5987 ± 0.0399** | +0.0029 |
+| Backward Transfer (BWT) | −0.1272 ± 0.0842 | **−0.0687 ± 0.0602** | +0.0585 (**46% less forgetting**) |
+
+Full per-seed numbers are in [`results/kaggle_benchmark_results.json`](results/kaggle_benchmark_results.json)
+and the benchmark script is [`examples/kaggle_benchmark.py`](examples/kaggle_benchmark.py).
+See [`paper/ARIA_TRL_paper.pdf`](paper/ARIA_TRL_paper.pdf) for the full write-up, including
+limitations (single baseline, small scale, 3 seeds).
+
 ## Design Philosophy
 
 aria-trl's design prioritizes:

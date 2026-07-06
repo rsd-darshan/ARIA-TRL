@@ -1,0 +1,127 @@
+{
+  "benchmark": "Sequential Domain Sentiment Benchmark",
+  "description": "3-task continual learning: SST-2 → Yelp Reviews → Emotion",
+  "model": "distilgpt2",
+  "datasets": ["stanfordnlp/sst2", "Yelp/yelp_review_full", "dair-ai/emotion"],
+  "task_names": ["Movies (SST-2)", "Restaurants (Yelp)", "Social (Emotion)"],
+  "seeds": [42, 123, 7],
+  "train_size": 200,
+  "test_size": 80,
+  "batch_size": 32,
+  "max_len": 48,
+  "epochs": 2,
+  "script": "examples/kaggle_benchmark.py",
+  "commit": "e25def0",
+  "repo": "rsd-darshan/ARIA-TRL",
+
+  "per_seed_results": {
+    "seed_42": {
+      "standard_ft": {
+        "acc_matrix": {
+          "after_task_0": [0.650, null, null],
+          "after_task_1": [0.512, 0.625, null],
+          "after_task_2": [0.500, 0.525, 0.713]
+        },
+        "ACC": 0.5792,
+        "BWT": -0.1250
+      },
+      "aria_trl": {
+        "acc_matrix": {
+          "after_task_0": [0.525, null, null],
+          "after_task_1": [0.562, 0.688, null],
+          "after_task_2": [0.650, 0.588, 0.725]
+        },
+        "ACC": 0.6542,
+        "BWT": 0.0125
+      }
+    },
+    "seed_123": {
+      "standard_ft": {
+        "acc_matrix": {
+          "after_task_0": [0.537, null, null],
+          "after_task_1": [0.588, 0.625, null],
+          "after_task_2": [0.487, 0.625, 0.675]
+        },
+        "ACC": 0.5958,
+        "BWT": -0.0250
+      },
+      "aria_trl": {
+        "acc_matrix": {
+          "after_task_0": [0.713, null, null],
+          "after_task_1": [0.500, 0.575, null],
+          "after_task_2": [0.500, 0.525, 0.662]
+        },
+        "ACC": 0.5625,
+        "BWT": -0.1312
+      }
+    },
+    "seed_7": {
+      "standard_ft": {
+        "acc_matrix": {
+          "after_task_0": [0.825, null, null],
+          "after_task_1": [0.512, 0.650, null],
+          "after_task_2": [0.500, 0.512, 0.825]
+        },
+        "ACC": 0.6125,
+        "BWT": -0.2313
+      },
+      "aria_trl": {
+        "acc_matrix": {
+          "after_task_0": [0.662, null, null],
+          "after_task_1": [0.588, 0.600, null],
+          "after_task_2": [0.588, 0.500, 0.650]
+        },
+        "ACC": 0.5792,
+        "BWT": -0.0875
+      }
+    }
+  },
+
+  "final_summary": {
+    "standard_ft": {
+      "ACC_mean": 0.5958,
+      "ACC_std": 0.0136,
+      "BWT_mean": -0.1271,
+      "BWT_std": 0.0842
+    },
+    "aria_trl": {
+      "ACC_mean": 0.5986,
+      "ACC_std": 0.0399,
+      "BWT_mean": -0.0687,
+      "BWT_std": 0.0602
+    },
+    "deltas": {
+      "ACC_delta": 0.0028,
+      "BWT_delta": 0.0583,
+      "ACC_winner": "ARIA-TRL",
+      "BWT_winner": "ARIA-TRL",
+      "BWT_improvement_pct": 46
+    }
+  },
+
+  "aria_hyperparameters": {
+    "plasticity_lambda": 0.001,
+    "spc_lambda": 15.0,
+    "adapter_dim": 64,
+    "slow_lr_ratio": 0.5,
+    "warmup_steps": 100
+  },
+
+  "key_innovations": [
+    "PlasticityGatedMLP: dual fast/slow pathways with learned gate pi",
+    "Per-task score heads (MultiHeadScoreWrapper): prevents classification head forgetting",
+    "Per-task adapters (TaskFastAdapter): 768->64->768 bottleneck, identity init",
+    "FisherConsolidator: EWC over ALL model parameters (attention + LN + embeddings + MLP)"
+  ],
+
+  "generated_assets": {
+    "charts": [
+      "aria_summary_chart.png",
+      "aria_forgetting_curve.png",
+      "aria_accuracy_matrix.png",
+      "aria_architecture.png"
+    ],
+    "video": "aria_results.mp4",
+    "all_in": "/Users/darshanpoudel/Desktop/ARIA/"
+  }
+}
