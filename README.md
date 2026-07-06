@@ -6,16 +6,27 @@
 
 **aria-trl** brings ARIA's continual learning mechanisms to Hugging Face's TRL library, enabling fine-tuning of large language models on sequential tasks without catastrophic forgetting.
 
-## Results: distilgpt2, Fine-Tuned Two Ways — and We Won
+## Benchmark Results
 
-We took the same pretrained `distilgpt2` model and fine-tuned it on the same 3-task
-sequential benchmark two different ways — **standard fine-tuning** (no protection
-against forgetting) vs. **aria-trl** (our three mechanisms) — with the same data, same
-seeds, same everything else. Only the training approach differs.
+### Summary
 
-**aria-trl wins on both standard continual-learning metrics, cutting forgetting by 46%.**
+`distilgpt2` was fine-tuned using two approaches on the same 3-task continual learning
+benchmark, with identical data and random seeds for both: **standard sequential
+fine-tuning** (no protection against forgetting) and **aria-trl** (the three mechanisms
+described below). Performance was evaluated using two standard continual-learning
+metrics — Average Accuracy (ACC) and Backward Transfer (BWT).
+
+**aria-trl outperforms standard fine-tuning on both metrics, reducing forgetting by 46%.**
+
+### Setup
+
+- **Model:** `distilgpt2`
+- **Tasks (in order):** SST-2 (Movies) → Yelp Review Full (Restaurants) → dair-ai/emotion (Social)
+- **Seeds:** 42, 123, 7
 
 https://github.com/user-attachments/assets/9d4b924a-461d-49ed-90e6-76a51a2b42b9
+
+### Results
 
 | Metric | Standard Fine-Tuning | aria-trl | Result |
 |---|---|---|---|
@@ -32,7 +43,7 @@ Task-0 (Movies) accuracy after each sequential step, all 3 seeds shown individua
 
 Full accuracy matrix for seed 42 — aria-trl's off-diagonal values (accuracy on earlier tasks, measured after training later ones) stay closer to their diagonal (just-trained) values than standard fine-tuning's do.
 
-**Setup:** `distilgpt2`, 3 sequential tasks (SST-2 → Yelp Review Full → dair-ai/emotion), 3 seeds (42, 123, 7). Full per-seed numbers: [`results/kaggle_benchmark_results.json`](results/kaggle_benchmark_results.json). Full write-up with method + limitations: [`paper/ARIA_TRL_paper.pdf`](paper/ARIA_TRL_paper.pdf). Benchmark script: [`examples/kaggle_benchmark.py`](examples/kaggle_benchmark.py).
+Full per-seed numbers: [`results/kaggle_benchmark_results.json`](results/kaggle_benchmark_results.json). Full write-up with method and limitations: [`paper/ARIA_TRL_paper.pdf`](paper/ARIA_TRL_paper.pdf). Benchmark script: [`examples/kaggle_benchmark.py`](examples/kaggle_benchmark.py).
 
 ## Overview
 
