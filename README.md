@@ -206,9 +206,9 @@ We evaluated aria-trl against standard sequential fine-tuning on a 3-task contin
 learning benchmark: **SST-2 (Movies) → Yelp Review Full (Restaurants) → dair-ai/emotion
 (Social)**, fine-tuning `distilgpt2`, across 3 seeds (42, 123, 7).
 
-[![Watch the results video](assets/aria_results_thumbnail.png)](assets/aria_results.mp4)
+https://github.com/user-attachments/assets/9d4b924a-461d-49ed-90e6-76a51a2b42b9
 
-*(click the image above to play `aria_results.mp4` — a ~43s walkthrough of the benchmark and results)*
+*(a ~43s walkthrough of the benchmark and results)*
 
 **aria-trl wins on both standard continual-learning metrics:**
 
