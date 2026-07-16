@@ -9,7 +9,7 @@
 ## Benchmark Results
 
 *Updated July 2026 — superseded a two-method comparison; see
-[`archive/v1/`](archive/v1/) for the original report.*
+[`archive/v1/`](archive/v1/) for the previous work.*
 
 ### Summary
 
