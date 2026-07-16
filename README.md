@@ -8,42 +8,70 @@
 
 ## Benchmark Results
 
+*Updated July 2026 — superseded a two-method comparison; see
+[`archive/v1/`](archive/v1/) for the original report.*
+
 ### Summary
 
-`distilgpt2` was fine-tuned using two approaches on the same 3-task continual learning
-benchmark, with identical data and random seeds for both: **standard sequential
-fine-tuning** (no protection against forgetting) and **aria-trl** (the three mechanisms
-described below). Performance was evaluated using two standard continual-learning
-metrics — Average Accuracy (ACC) and Backward Transfer (BWT).
+`distilgpt2` was fine-tuned three ways on the same 3-task continual learning benchmark,
+with identical data across all three: **standard sequential fine-tuning** (no protection),
+**EWC** (textbook Fisher-weighted consolidation, no fast/slow split), and **aria-trl**
+(the three mechanisms described below). Validated in two stages — 3 seeds used during
+development, then 5 fresh seeds chosen after the fact and never used while tuning —
+reported separately below, not just combined.
 
-**aria-trl outperforms standard fine-tuning on both metrics, reducing forgetting by 46%.**
+**Across all 8 seeds, aria-trl matches EWC on accuracy (within noise) and cuts forgetting
+to near zero — while beating unmitigated fine-tuning outright on both metrics.**
+
+> **Reproducing this:** these numbers come from the self-contained
+> [`examples/kaggle_benchmark.py`](examples/kaggle_benchmark.py), which inlines a corrected
+> version of the mechanism — three implementation defects (Fisher penalty leaking into the
+> fast pathway, gate warmup never activating, cold-started heads) were found and fixed while
+> building a fair EWC comparison; see [`paper/ARIA_TRL_paper.pdf`](paper/ARIA_TRL_paper.pdf)
+> Section 2 for details. **These fixes have not yet been ported into the installable
+> `aria_trl/` package** — `pip install aria-trl` today does not yet reproduce this exact
+> result. Porting is planned; until then, this benchmark validates the *mechanism*, not the
+> current package release.
 
 ### Setup
 
-- **Model:** `distilgpt2`
+- **Model:** `distilgpt2`, 5 epochs per task (all three methods)
 - **Tasks (in order):** SST-2 (Movies) → Yelp Review Full (Restaurants) → dair-ai/emotion (Social)
-- **Seeds:** 42, 123, 7
-
-https://github.com/user-attachments/assets/9d4b924a-461d-49ed-90e6-76a51a2b42b9
+- **Dev seeds:** 42, 123, 7 &nbsp;·&nbsp; **Fresh seeds (held out):** 2024, 777, 555, 99, 1234
 
 ### Results
 
-| Metric | Standard Fine-Tuning | aria-trl | Result |
+| Metric | Standard FT | EWC | aria-trl |
 |---|---|---|---|
-| Average Accuracy (ACC) | 0.5958 ± 0.0136 | **0.5987 ± 0.0399** | +0.0029 |
-| Backward Transfer (BWT) | −0.1272 ± 0.0842 | **−0.0687 ± 0.0602** | **46% less forgetting** |
+| ACC (dev, n=3) | 0.7639 | 0.7903 | 0.7861 |
+| ACC (fresh, n=5) | 0.7992 | 0.7942 | 0.7975 |
+| **ACC (combined, n=8)** | 0.7859 | 0.7927 | **0.7932** |
+| BWT (dev, n=3) | −0.0563 | −0.0334 | −0.0104 |
+| BWT (fresh, n=5) | −0.0362 | −0.0313 | −0.0038 |
+| **BWT (combined, n=8)** | −0.0438 | −0.0320 | **−0.0063** |
 
-<p align="center"><img src="assets/trl_summary_bars.png" width="85%" alt="ACC and BWT summary bar chart"></p>
+aria-trl's combined-8 ACC is +0.0005 ahead of EWC — smaller than either method's own
+seed-to-seed std (0.008–0.018), i.e. a statistical tie, not a win. BWT is +0.0257 ahead of
+EWC and +0.0375 ahead of Standard FT — the least forgetting of the three at every
+validation stage. This is not a clean sweep: 3 of the 8 seeds are simultaneous losses on
+both metrics for aria-trl, reported honestly rather than averaged away — see the paper for
+the per-seed breakdown.
 
-<p align="center"><img src="assets/trl_forgetting_curves.png" width="85%" alt="Per-seed forgetting curves"></p>
+<p align="center"><img src="assets/fig1_summary_bars.png" width="85%" alt="ACC and BWT summary bar chart, 8 seeds"></p>
 
-Task-0 (Movies) accuracy after each sequential step, all 3 seeds shown individually — standard fine-tuning drops monotonically in every seed; aria-trl stabilizes or recovers in two of three.
+<p align="center"><img src="assets/fig2_dev_vs_fresh_validation.png" width="85%" alt="Dev vs fresh seed validation"></p>
 
-<p align="center"><img src="assets/trl_accuracy_matrix.png" width="85%" alt="Accuracy matrix heatmap"></p>
+The same pattern — aria-trl tied with EWC on ACC, ahead on BWT — holds independently in the development seeds and the fresh, previously-unseen seeds.
 
-Full accuracy matrix for seed 42 — aria-trl's off-diagonal values (accuracy on earlier tasks, measured after training later ones) stay closer to their diagonal (just-trained) values than standard fine-tuning's do.
+<p align="center"><img src="assets/fig3_forgetting_curves_8seed.png" width="85%" alt="Per-seed forgetting curves, 8 seeds"></p>
 
-Full per-seed numbers: [`results/kaggle_benchmark_results.json`](results/kaggle_benchmark_results.json). Full write-up with method and limitations: [`paper/ARIA_TRL_paper.pdf`](paper/ARIA_TRL_paper.pdf). Benchmark script: [`examples/kaggle_benchmark.py`](examples/kaggle_benchmark.py).
+Task-0 accuracy after each step, all 8 seeds shown individually. Seeds 777 and 1234 are where aria-trl's retention advantage does not hold.
+
+<p align="center"><img src="assets/fig4_accuracy_matrix.png" width="85%" alt="Accuracy matrix heatmap"></p>
+
+Full accuracy matrix, seed 42 — aria-trl's off-diagonal (older-task) values sit closer to their diagonal values than either baseline's.
+
+Full per-seed numbers: [`results/kaggle_benchmark_results.json`](results/kaggle_benchmark_results.json). Full write-up with method, defects found, and limitations: [`paper/ARIA_TRL_paper.pdf`](paper/ARIA_TRL_paper.pdf). Benchmark script: [`examples/kaggle_benchmark.py`](examples/kaggle_benchmark.py).
 
 ## Overview
 

@@ -1,127 +1,567 @@
 {
-  "benchmark": "Sequential Domain Sentiment Benchmark",
-  "description": "3-task continual learning: SST-2 → Yelp Reviews → Emotion",
+  "benchmark": "Sequential Domain Sentiment Benchmark (3-way, 8-seed validated)",
+  "description": "3-task continual learning: SST-2 -> Yelp Reviews -> Emotion",
   "model": "distilgpt2",
-  "datasets": ["stanfordnlp/sst2", "Yelp/yelp_review_full", "dair-ai/emotion"],
-  "task_names": ["Movies (SST-2)", "Restaurants (Yelp)", "Social (Emotion)"],
-  "seeds": [42, 123, 7],
+  "datasets": [
+    "stanfordnlp/sst2",
+    "Yelp/yelp_review_full",
+    "dair-ai/emotion"
+  ],
+  "task_names": [
+    "Movies (SST-2)",
+    "Restaurants (Yelp)",
+    "Social (Emotion)"
+  ],
+  "dev_seeds": [
+    42,
+    123,
+    7
+  ],
+  "fresh_seeds": [
+    2024,
+    777,
+    555,
+    99,
+    1234
+  ],
+  "all_seeds": [
+    42,
+    123,
+    7,
+    2024,
+    777,
+    555,
+    99,
+    1234
+  ],
   "train_size": 200,
   "test_size": 80,
-  "batch_size": 32,
-  "max_len": 48,
-  "epochs": 2,
-  "script": "examples/kaggle_benchmark.py",
-  "commit": "e25def0",
-  "repo": "rsd-darshan/ARIA-TRL",
-
+  "epochs": 5,
+  "methods_compared": [
+    "standard_ft",
+    "ewc",
+    "aria_trl"
+  ],
   "per_seed_results": {
     "seed_42": {
       "standard_ft": {
         "acc_matrix": {
-          "after_task_0": [0.650, null, null],
-          "after_task_1": [0.512, 0.625, null],
-          "after_task_2": [0.500, 0.525, 0.713]
+          "after_task_0": [
+            0.8
+          ],
+          "after_task_1": [
+            0.5625,
+            0.825
+          ],
+          "after_task_2": [
+            0.7,
+            0.7375,
+            0.9125
+          ]
         },
-        "ACC": 0.5792,
-        "BWT": -0.1250
+        "ACC": 0.7833,
+        "BWT": -0.0938
+      },
+      "ewc": {
+        "acc_matrix": {
+          "after_task_0": [
+            0.8
+          ],
+          "after_task_1": [
+            0.5875,
+            0.775
+          ],
+          "after_task_2": [
+            0.7375,
+            0.7125,
+            0.9375
+          ]
+        },
+        "ACC": 0.7958,
+        "BWT": -0.0625
       },
       "aria_trl": {
         "acc_matrix": {
-          "after_task_0": [0.525, null, null],
-          "after_task_1": [0.562, 0.688, null],
-          "after_task_2": [0.650, 0.588, 0.725]
+          "after_task_0": [
+            0.725
+          ],
+          "after_task_1": [
+            0.775,
+            0.725
+          ],
+          "after_task_2": [
+            0.7625,
+            0.7125,
+            0.9375
+          ]
         },
-        "ACC": 0.6542,
+        "ACC": 0.8042,
         "BWT": 0.0125
       }
     },
     "seed_123": {
       "standard_ft": {
         "acc_matrix": {
-          "after_task_0": [0.537, null, null],
-          "after_task_1": [0.588, 0.625, null],
-          "after_task_2": [0.487, 0.625, 0.675]
+          "after_task_0": [
+            0.75
+          ],
+          "after_task_1": [
+            0.65,
+            0.675
+          ],
+          "after_task_2": [
+            0.7375,
+            0.725,
+            0.8
+          ]
         },
-        "ACC": 0.5958,
-        "BWT": -0.0250
+        "ACC": 0.7542,
+        "BWT": 0.0187
+      },
+      "ewc": {
+        "acc_matrix": {
+          "after_task_0": [
+            0.75
+          ],
+          "after_task_1": [
+            0.65,
+            0.6875
+          ],
+          "after_task_2": [
+            0.7625,
+            0.7125,
+            0.875
+          ]
+        },
+        "ACC": 0.7833,
+        "BWT": 0.0187
       },
       "aria_trl": {
         "acc_matrix": {
-          "after_task_0": [0.713, null, null],
-          "after_task_1": [0.500, 0.575, null],
-          "after_task_2": [0.500, 0.525, 0.662]
+          "after_task_0": [
+            0.8
+          ],
+          "after_task_1": [
+            0.65,
+            0.725
+          ],
+          "after_task_2": [
+            0.725,
+            0.6875,
+            0.9
+          ]
         },
-        "ACC": 0.5625,
-        "BWT": -0.1312
+        "ACC": 0.7708,
+        "BWT": -0.0563
       }
     },
     "seed_7": {
       "standard_ft": {
         "acc_matrix": {
-          "after_task_0": [0.825, null, null],
-          "after_task_1": [0.512, 0.650, null],
-          "after_task_2": [0.500, 0.512, 0.825]
+          "after_task_0": [
+            0.8
+          ],
+          "after_task_1": [
+            0.8,
+            0.75
+          ],
+          "after_task_2": [
+            0.675,
+            0.6875,
+            0.9
+          ]
         },
-        "ACC": 0.6125,
-        "BWT": -0.2313
+        "ACC": 0.7542,
+        "BWT": -0.0938
+      },
+      "ewc": {
+        "acc_matrix": {
+          "after_task_0": [
+            0.8
+          ],
+          "after_task_1": [
+            0.775,
+            0.75
+          ],
+          "after_task_2": [
+            0.725,
+            0.7125,
+            0.9375
+          ]
+        },
+        "ACC": 0.7917,
+        "BWT": -0.0563
       },
       "aria_trl": {
         "acc_matrix": {
-          "after_task_0": [0.662, null, null],
-          "after_task_1": [0.588, 0.600, null],
-          "after_task_2": [0.588, 0.500, 0.650]
+          "after_task_0": [
+            0.6875
+          ],
+          "after_task_1": [
+            0.5,
+            0.7125
+          ],
+          "after_task_2": [
+            0.675,
+            0.75,
+            0.925
+          ]
         },
-        "ACC": 0.5792,
-        "BWT": -0.0875
+        "ACC": 0.7833,
+        "BWT": 0.0125
+      }
+    },
+    "seed_2024": {
+      "standard_ft": {
+        "acc_matrix": {
+          "after_task_0": [
+            0.75
+          ],
+          "after_task_1": [
+            0.725,
+            0.75
+          ],
+          "after_task_2": [
+            0.75,
+            0.7,
+            0.9125
+          ]
+        },
+        "ACC": 0.7875,
+        "BWT": -0.025
+      },
+      "ewc": {
+        "acc_matrix": {
+          "after_task_0": [
+            0.75
+          ],
+          "after_task_1": [
+            0.7125,
+            0.7375
+          ],
+          "after_task_2": [
+            0.75,
+            0.7,
+            0.9
+          ]
+        },
+        "ACC": 0.7833,
+        "BWT": -0.0188
+      },
+      "aria_trl": {
+        "acc_matrix": {
+          "after_task_0": [
+            0.5125
+          ],
+          "after_task_1": [
+            0.5,
+            0.75
+          ],
+          "after_task_2": [
+            0.675,
+            0.7625,
+            0.9375
+          ]
+        },
+        "ACC": 0.7917,
+        "BWT": 0.0875
+      }
+    },
+    "seed_777": {
+      "standard_ft": {
+        "acc_matrix": {
+          "after_task_0": [
+            0.7375
+          ],
+          "after_task_1": [
+            0.7,
+            0.75
+          ],
+          "after_task_2": [
+            0.7375,
+            0.725,
+            0.925
+          ]
+        },
+        "ACC": 0.7958,
+        "BWT": -0.0125
+      },
+      "ewc": {
+        "acc_matrix": {
+          "after_task_0": [
+            0.7375
+          ],
+          "after_task_1": [
+            0.725,
+            0.7375
+          ],
+          "after_task_2": [
+            0.75,
+            0.725,
+            0.925
+          ]
+        },
+        "ACC": 0.8,
+        "BWT": -0.0
+      },
+      "aria_trl": {
+        "acc_matrix": {
+          "after_task_0": [
+            0.7875
+          ],
+          "after_task_1": [
+            0.75,
+            0.7875
+          ],
+          "after_task_2": [
+            0.725,
+            0.7125,
+            0.9125
+          ]
+        },
+        "ACC": 0.7833,
+        "BWT": -0.0687
+      }
+    },
+    "seed_555": {
+      "standard_ft": {
+        "acc_matrix": {
+          "after_task_0": [
+            0.825
+          ],
+          "after_task_1": [
+            0.75,
+            0.8
+          ],
+          "after_task_2": [
+            0.725,
+            0.7375,
+            0.9375
+          ]
+        },
+        "ACC": 0.8,
+        "BWT": -0.0812
+      },
+      "ewc": {
+        "acc_matrix": {
+          "after_task_0": [
+            0.825
+          ],
+          "after_task_1": [
+            0.725,
+            0.7875
+          ],
+          "after_task_2": [
+            0.7625,
+            0.725,
+            0.925
+          ]
+        },
+        "ACC": 0.8042,
+        "BWT": -0.0625
+      },
+      "aria_trl": {
+        "acc_matrix": {
+          "after_task_0": [
+            0.6875
+          ],
+          "after_task_1": [
+            0.6125,
+            0.7625
+          ],
+          "after_task_2": [
+            0.75,
+            0.8,
+            0.925
+          ]
+        },
+        "ACC": 0.825,
+        "BWT": 0.05
+      }
+    },
+    "seed_99": {
+      "standard_ft": {
+        "acc_matrix": {
+          "after_task_0": [
+            0.7625
+          ],
+          "after_task_1": [
+            0.65,
+            0.7625
+          ],
+          "after_task_2": [
+            0.7125,
+            0.6875,
+            0.925
+          ]
+        },
+        "ACC": 0.775,
+        "BWT": -0.0625
+      },
+      "ewc": {
+        "acc_matrix": {
+          "after_task_0": [
+            0.7625
+          ],
+          "after_task_1": [
+            0.7125,
+            0.7375
+          ],
+          "after_task_2": [
+            0.725,
+            0.7,
+            0.925
+          ]
+        },
+        "ACC": 0.7833,
+        "BWT": -0.0375
+      },
+      "aria_trl": {
+        "acc_matrix": {
+          "after_task_0": [
+            0.775
+          ],
+          "after_task_1": [
+            0.7,
+            0.75
+          ],
+          "after_task_2": [
+            0.725,
+            0.7625,
+            0.95
+          ]
+        },
+        "ACC": 0.8125,
+        "BWT": -0.0188
+      }
+    },
+    "seed_1234": {
+      "standard_ft": {
+        "acc_matrix": {
+          "after_task_0": [
+            0.775
+          ],
+          "after_task_1": [
+            0.825,
+            0.7875
+          ],
+          "after_task_2": [
+            0.775,
+            0.7875,
+            0.95
+          ]
+        },
+        "ACC": 0.8375,
+        "BWT": 0.0
+      },
+      "ewc": {
+        "acc_matrix": {
+          "after_task_0": [
+            0.775
+          ],
+          "after_task_1": [
+            0.8375,
+            0.7625
+          ],
+          "after_task_2": [
+            0.7375,
+            0.725,
+            0.9375
+          ]
+        },
+        "ACC": 0.8,
+        "BWT": -0.0375
+      },
+      "aria_trl": {
+        "acc_matrix": {
+          "after_task_0": [
+            0.7375
+          ],
+          "after_task_1": [
+            0.8125,
+            0.8
+          ],
+          "after_task_2": [
+            0.65,
+            0.75,
+            0.925
+          ]
+        },
+        "ACC": 0.775,
+        "BWT": -0.0688
       }
     }
   },
-
-  "final_summary": {
-    "standard_ft": {
-      "ACC_mean": 0.5958,
-      "ACC_std": 0.0136,
-      "BWT_mean": -0.1271,
-      "BWT_std": 0.0842
+  "summary": {
+    "dev": {
+      "standard_ft": {
+        "ACC_mean": 0.7639,
+        "ACC_std": 0.0137,
+        "BWT_mean": -0.0563,
+        "BWT_std": 0.053
+      },
+      "ewc": {
+        "ACC_mean": 0.7903,
+        "ACC_std": 0.0052,
+        "BWT_mean": -0.0334,
+        "BWT_std": 0.0369
+      },
+      "aria_trl": {
+        "ACC_mean": 0.7861,
+        "ACC_std": 0.0138,
+        "BWT_mean": -0.0104,
+        "BWT_std": 0.0324
+      }
     },
-    "aria_trl": {
-      "ACC_mean": 0.5986,
-      "ACC_std": 0.0399,
-      "BWT_mean": -0.0687,
-      "BWT_std": 0.0602
+    "fresh": {
+      "standard_ft": {
+        "ACC_mean": 0.7992,
+        "ACC_std": 0.021,
+        "BWT_mean": -0.0362,
+        "BWT_std": 0.0307
+      },
+      "ewc": {
+        "ACC_mean": 0.7942,
+        "ACC_std": 0.009,
+        "BWT_mean": -0.0313,
+        "BWT_std": 0.0209
+      },
+      "aria_trl": {
+        "ACC_mean": 0.7975,
+        "ACC_std": 0.0186,
+        "BWT_mean": -0.0038,
+        "BWT_std": 0.0631
+      }
     },
-    "deltas": {
-      "ACC_delta": 0.0028,
-      "BWT_delta": 0.0583,
-      "ACC_winner": "ARIA-TRL",
-      "BWT_winner": "ARIA-TRL",
-      "BWT_improvement_pct": 46
+    "combined": {
+      "standard_ft": {
+        "ACC_mean": 0.7859,
+        "ACC_std": 0.0252,
+        "BWT_mean": -0.0438,
+        "BWT_std": 0.0417
+      },
+      "ewc": {
+        "ACC_mean": 0.7927,
+        "ACC_std": 0.008,
+        "BWT_mean": -0.032,
+        "BWT_std": 0.028
+      },
+      "aria_trl": {
+        "ACC_mean": 0.7932,
+        "ACC_std": 0.0178,
+        "BWT_mean": -0.0063,
+        "BWT_std": 0.0538
+      }
     }
   },
-
-  "aria_hyperparameters": {
-    "plasticity_lambda": 0.001,
-    "spc_lambda": 15.0,
-    "adapter_dim": 64,
-    "slow_lr_ratio": 0.5,
-    "warmup_steps": 100
-  },
-
-  "key_innovations": [
-    "PlasticityGatedMLP: dual fast/slow pathways with learned gate pi",
-    "Per-task score heads (MultiHeadScoreWrapper): prevents classification head forgetting",
-    "Per-task adapters (TaskFastAdapter): 768->64->768 bottleneck, identity init",
-    "FisherConsolidator: EWC over ALL model parameters (attention + LN + embeddings + MLP)"
-  ],
-
-  "generated_assets": {
-    "charts": [
-      "aria_summary_chart.png",
-      "aria_forgetting_curve.png",
-      "aria_accuracy_matrix.png",
-      "aria_architecture.png"
-    ],
-    "video": "aria_results.mp4",
-    "all_in": "/Users/darshanpoudel/Desktop/ARIA/"
+  "deltas_combined": {
+    "aria_vs_standard_ft": {
+      "ACC_delta": 0.0073,
+      "BWT_delta": 0.0375
+    },
+    "aria_vs_ewc": {
+      "ACC_delta": 0.0005,
+      "BWT_delta": 0.0257
+    }
   }
 }
