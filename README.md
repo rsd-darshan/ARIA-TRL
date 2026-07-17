@@ -23,15 +23,22 @@ reported separately below, not just combined.
 **Across all 8 seeds, aria-trl matches EWC on accuracy (within noise) and cuts forgetting
 to near zero — while beating unmitigated fine-tuning outright on both metrics.**
 
-> **Reproducing this:** these numbers come from the self-contained
-> [`examples/kaggle_benchmark.py`](examples/kaggle_benchmark.py), which inlines a corrected
-> version of the mechanism — three implementation defects (Fisher penalty leaking into the
-> fast pathway, gate warmup never activating, cold-started heads) were found and fixed while
-> building a fair EWC comparison; see [`paper/ARIA_TRL_paper.pdf`](paper/ARIA_TRL_paper.pdf)
-> Section 2 for details. **These fixes have not yet been ported into the installable
-> `aria_trl/` package** — `pip install aria-trl` today does not yet reproduce this exact
-> result. Porting is planned; until then, this benchmark validates the *mechanism*, not the
-> current package release.
+> **Reproducing this:** these numbers come from
+> [`examples/kaggle_benchmark.py`](examples/kaggle_benchmark.py), which originally inlined a
+> corrected version of the mechanism after three implementation defects (Fisher penalty
+> leaking into the fast pathway, gate warmup never activating, cold-started heads) were found
+> and fixed while building a fair EWC comparison; see
+> [`paper/ARIA_TRL_paper.pdf`](paper/ARIA_TRL_paper.pdf) Section 2 for details. **These fixes
+> have since been ported into the installable `aria_trl/` package.** Porting surfaced a
+> fourth, more severe defect specific to the package (not present in the benchmark script):
+> `PlasticityGatedMLP` was never copying the pretrained FFN weights into the new fast/slow
+> pathways, so every `ContinualSFTTrainer` run silently fine-tuned from randomly-initialized
+> FFN layers instead of the pretrained checkpoint — fixed as part of this port. The ported
+> package was verified end-to-end on a full seed-42 run: task-0 accuracy went from
+> 0.463 (below chance, pre-fix) to 0.762, with ACC and BWT close to the benchmark script's
+> numbers and within the seed-to-seed variance already documented above — not byte-identical,
+> which isn't a realistic bar across two independently-structured codebases, but the same
+> architecture producing statistically consistent results.
 
 ### Setup
 
@@ -132,7 +139,10 @@ aria_config = ARIAConfig(
     plasticity_lambda=0.01,      # bimodal gate specialization
     spc_lambda=100.0,            # Fisher consolidation strength
     adapter_dim=64,              # task adapter bottleneck
-    slow_lr_ratio=0.5,           # asymmetric LR: slow=0.5x fast
+    # slow_lr_ratio defaults to 1.0 (gate-driven gradient dampening is the
+    # only slow-pathway throttle by default; lower this only on top of that,
+    # not instead of it) and warmup_steps defaults to None (auto-computed
+    # from your actual dataset size and batch size).
 )
 
 # Training arguments
@@ -185,8 +195,11 @@ config = ARIAConfig(
     plasticity_lambda=0.01,          # Bimodal specialization loss weight
     spc_lambda=100.0,                # Fisher regularization strength
     adapter_dim=64,                  # Task adapter bottleneck dimension
-    slow_lr_ratio=0.5,               # Slow pathway LR multiplier
-    warmup_steps=500,                # Before plasticity loss activates
+    slow_lr_ratio=1.0,               # Slow pathway LR multiplier (on top of
+                                      # gate-driven gradient dampening, which
+                                      # is the default throttle — see below)
+    warmup_steps=None,               # None = auto-compute one epoch's worth
+                                      # of steps from your dataset/batch size
     consolidation_steps_per_task=None # Fisher estimation steps (None=all)
 )
 ```

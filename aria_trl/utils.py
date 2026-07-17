@@ -97,7 +97,8 @@ def get_fast_parameters(model: torch.nn.Module) -> List[torch.nn.Parameter]:
 def setup_asymmetric_lr_groups(
     model: torch.nn.Module,
     base_lr: float,
-    slow_lr_ratio: float = 0.5,
+    slow_lr_ratio: float = 1.0,
+    exclude_ids: set | None = None,
 ) -> List[Dict]:
     """
     Create optimizer param groups with asymmetric learning rates.
@@ -106,17 +107,21 @@ def setup_asymmetric_lr_groups(
         model: The model
         base_lr: Base learning rate for fast pathway
         slow_lr_ratio: Multiplier for slow pathway LR
+        exclude_ids: Parameter ids to leave out of both groups entirely
+            (the caller assigns them to their own group instead — e.g. an
+            active task head/adapter that should train at a different LR)
 
     Returns:
         List of param groups ready for optimizer
     """
-    slow_params = get_slow_parameters(model)
+    exclude_ids = exclude_ids or set()
+    slow_params = [p for p in get_slow_parameters(model) if id(p) not in exclude_ids]
     slow_param_ids = {id(p) for p in slow_params}
 
     param_groups = [
         {
             "params": [p for p in model.parameters()
-                      if p.requires_grad and id(p) not in slow_param_ids],
+                      if p.requires_grad and id(p) not in slow_param_ids and id(p) not in exclude_ids],
             "lr": base_lr,
             "name": "fast_pathway",
         },
