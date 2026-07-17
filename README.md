@@ -39,6 +39,8 @@ to near zero — while beating unmitigated fine-tuning outright on both metrics.
 - **Tasks (in order):** SST-2 (Movies) → Yelp Review Full (Restaurants) → dair-ai/emotion (Social)
 - **Dev seeds:** 42, 123, 7 &nbsp;·&nbsp; **Fresh seeds (held out):** 2024, 777, 555, 99, 1234
 
+https://github.com/user-attachments/assets/d720c09b-cad2-484d-a5b4-0e8943961408
+
 ### Results
 
 | Metric | Standard FT | EWC | aria-trl |
