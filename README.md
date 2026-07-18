@@ -6,82 +6,6 @@
 
 **aria-trl** brings ARIA's continual learning mechanisms to Hugging Face's TRL library, enabling fine-tuning of large language models on sequential tasks without catastrophic forgetting.
 
-## Benchmark Results
-
-*Updated July 2026 — superseded a two-method comparison; see
-[`archive/v1/`](archive/v1/) for the previous work.*
-
-### Summary
-
-`distilgpt2` was fine-tuned three ways on the same 3-task continual learning benchmark,
-with identical data across all three: **standard sequential fine-tuning** (no protection),
-**EWC** (textbook Fisher-weighted consolidation, no fast/slow split), and **aria-trl**
-(the three mechanisms described below). Validated in two stages — 3 seeds used during
-development, then 5 fresh seeds chosen after the fact and never used while tuning —
-reported separately below, not just combined.
-
-**Across all 8 seeds, aria-trl matches EWC on accuracy (within noise) and cuts forgetting
-to near zero — while beating unmitigated fine-tuning outright on both metrics.**
-
-> **Reproducing this:** these numbers come from
-> [`examples/kaggle_benchmark.py`](examples/kaggle_benchmark.py), which originally inlined a
-> corrected version of the mechanism after three implementation defects (Fisher penalty
-> leaking into the fast pathway, gate warmup never activating, cold-started heads) were found
-> and fixed while building a fair EWC comparison; see
-> [`paper/ARIA_TRL_paper.pdf`](paper/ARIA_TRL_paper.pdf) Section 2 for details. **These fixes
-> have since been ported into the installable `aria_trl/` package.** Porting surfaced a
-> fourth, more severe defect specific to the package (not present in the benchmark script):
-> `PlasticityGatedMLP` was never copying the pretrained FFN weights into the new fast/slow
-> pathways, so every `ContinualSFTTrainer` run silently fine-tuned from randomly-initialized
-> FFN layers instead of the pretrained checkpoint — fixed as part of this port. The ported
-> package was verified end-to-end on a full seed-42 run: task-0 accuracy went from
-> 0.463 (below chance, pre-fix) to 0.762, with ACC and BWT close to the benchmark script's
-> numbers and within the seed-to-seed variance already documented above — not byte-identical,
-> which isn't a realistic bar across two independently-structured codebases, but the same
-> architecture producing statistically consistent results.
-
-### Setup
-
-- **Model:** `distilgpt2`, 5 epochs per task (all three methods)
-- **Tasks (in order):** SST-2 (Movies) → Yelp Review Full (Restaurants) → dair-ai/emotion (Social)
-- **Dev seeds:** 42, 123, 7 &nbsp;·&nbsp; **Fresh seeds (held out):** 2024, 777, 555, 99, 1234
-
-https://github.com/user-attachments/assets/d720c09b-cad2-484d-a5b4-0e8943961408
-
-### Results
-
-| Metric | Standard FT | EWC | aria-trl |
-|---|---|---|---|
-| ACC (dev, n=3) | 0.7639 | 0.7903 | 0.7861 |
-| ACC (fresh, n=5) | 0.7992 | 0.7942 | 0.7975 |
-| **ACC (combined, n=8)** | 0.7859 | 0.7927 | **0.7932** |
-| BWT (dev, n=3) | −0.0563 | −0.0334 | −0.0104 |
-| BWT (fresh, n=5) | −0.0362 | −0.0313 | −0.0038 |
-| **BWT (combined, n=8)** | −0.0438 | −0.0320 | **−0.0063** |
-
-aria-trl's combined-8 ACC is +0.0005 ahead of EWC — smaller than either method's own
-seed-to-seed std (0.008–0.018), i.e. a statistical tie, not a win. BWT is +0.0257 ahead of
-EWC and +0.0375 ahead of Standard FT — the least forgetting of the three at every
-validation stage. This is not a clean sweep: 3 of the 8 seeds are simultaneous losses on
-both metrics for aria-trl, reported honestly rather than averaged away — see the paper for
-the per-seed breakdown.
-
-<p align="center"><img src="assets/fig1_summary_bars.png" width="85%" alt="ACC and BWT summary bar chart, 8 seeds"></p>
-
-<p align="center"><img src="assets/fig2_dev_vs_fresh_validation.png" width="85%" alt="Dev vs fresh seed validation"></p>
-
-The same pattern — aria-trl tied with EWC on ACC, ahead on BWT — holds independently in the development seeds and the fresh, previously-unseen seeds.
-
-<p align="center"><img src="assets/fig3_forgetting_curves_8seed.png" width="85%" alt="Per-seed forgetting curves, 8 seeds"></p>
-
-Task-0 accuracy after each step, all 8 seeds shown individually. Seeds 777 and 1234 are where aria-trl's retention advantage does not hold.
-
-<p align="center"><img src="assets/fig4_accuracy_matrix.png" width="85%" alt="Accuracy matrix heatmap"></p>
-
-Full accuracy matrix, seed 42 — aria-trl's off-diagonal (older-task) values sit closer to their diagonal values than either baseline's.
-
-Full per-seed numbers: [`results/kaggle_benchmark_results.json`](results/kaggle_benchmark_results.json). Full write-up with method, defects found, and limitations: [`paper/ARIA_TRL_paper.pdf`](paper/ARIA_TRL_paper.pdf). Benchmark script: [`examples/kaggle_benchmark.py`](examples/kaggle_benchmark.py).
-
 ## Overview
 
 Fine-tuning LLMs sequentially on multiple tasks typically leads to **catastrophic forgetting** — the model forgets earlier tasks while learning new ones. aria-trl prevents this through three ARIA mechanisms:
@@ -139,10 +63,7 @@ aria_config = ARIAConfig(
     plasticity_lambda=0.01,      # bimodal gate specialization
     spc_lambda=100.0,            # Fisher consolidation strength
     adapter_dim=64,              # task adapter bottleneck
-    # slow_lr_ratio defaults to 1.0 (gate-driven gradient dampening is the
-    # only slow-pathway throttle by default; lower this only on top of that,
-    # not instead of it) and warmup_steps defaults to None (auto-computed
-    # from your actual dataset size and batch size).
+    slow_lr_ratio=0.5,           # asymmetric LR: slow=0.5x fast
 )
 
 # Training arguments
@@ -195,11 +116,8 @@ config = ARIAConfig(
     plasticity_lambda=0.01,          # Bimodal specialization loss weight
     spc_lambda=100.0,                # Fisher regularization strength
     adapter_dim=64,                  # Task adapter bottleneck dimension
-    slow_lr_ratio=1.0,               # Slow pathway LR multiplier (on top of
-                                      # gate-driven gradient dampening, which
-                                      # is the default throttle — see below)
-    warmup_steps=None,               # None = auto-compute one epoch's worth
-                                      # of steps from your dataset/batch size
+    slow_lr_ratio=0.5,               # Slow pathway LR multiplier
+    warmup_steps=500,                # Before plasticity loss activates
     consolidation_steps_per_task=None # Fisher estimation steps (None=all)
 )
 ```

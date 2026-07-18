@@ -101,20 +101,8 @@ class FisherConsolidator:
         self.task_fishers = []
 
     def _protected_params(self):
-        """Yield (name, param) for backbone parameters worth protecting with EWC.
-
-        Excludes the fast pathway of any PlasticityGatedMLP: fast/slow only
-        works if the fast lane stays genuinely free to adapt each task. Only
-        the slow lane, attention, LayerNorm, and embeddings are protected.
-        """
-        fast_ids = set()
-        for m in self.model.modules():
-            if isinstance(m, PlasticityGatedMLP):
-                fast_ids.update(id(p) for p in m.fast_in.parameters())
-                fast_ids.update(id(p) for p in m.fast_out.parameters())
+        """Yield (name, param) for all backbone parameters worth protecting with EWC."""
         for name, param in self.model.named_parameters():
-            if id(param) in fast_ids:
-                continue
             yield name, param
 
     def consolidate(self, task_id, eval_loader, max_steps=None):
@@ -168,13 +156,11 @@ def _get_slow_params(model):
     return params
 
 
-def _setup_lr_groups(model, base_lr, slow_ratio=0.5, exclude_ids=None):
-    exclude_ids = exclude_ids or set()
-    slow_ids = {id(p) for p in _get_slow_params(model)} - exclude_ids
+def _setup_lr_groups(model, base_lr, slow_ratio=0.5):
+    slow_ids = {id(p) for p in _get_slow_params(model)}
     return [
-        {"params": [p for p in model.parameters()
-                    if p.requires_grad and id(p) not in slow_ids and id(p) not in exclude_ids], "lr": base_lr},
-        {"params": [p for p in model.parameters() if p.requires_grad and id(p) in slow_ids],    "lr": base_lr * slow_ratio},
+        {"params": [p for p in model.parameters() if p.requires_grad and id(p) not in slow_ids], "lr": base_lr},
+        {"params": [p for p in model.parameters() if p.requires_grad and id(p) in slow_ids],     "lr": base_lr * slow_ratio},
     ]
 
 
@@ -262,16 +248,7 @@ class ContinualSFTTrainer(Trainer):
         d_model = self.model.config.hidden_size
         n_labels = self.model.config.num_labels
         h = nn.Linear(d_model, n_labels, bias=False).to(self.args.device)
-        # Warm-start from the previous task's head instead of random init —
-        # all tasks here are binary sentiment-adjacent, so transfer is real
-        # and head identity is already known at train time.
-        head_name = getattr(self.model, '_aria_head_name', 'score')
-        wrapper = getattr(self.model, head_name, None)
-        if wrapper is not None and len(wrapper.heads) > 0:
-            with torch.no_grad():
-                h.weight.copy_(wrapper.heads[-1].weight)
-        else:
-            nn.init.normal_(h.weight, std=0.02)
+        nn.init.normal_(h.weight, std=0.02)
         return h
 
     def _register_adapter_hook(self):
@@ -324,30 +301,14 @@ class ContinualSFTTrainer(Trainer):
 
     def create_optimizer(self):
         if self.optimizer is None:
-            head_lr_mult = 5.0
-            # Active head gets its own high-LR group; it's cold-started each task
-            # and only has ~one epoch worth of steps to learn from.
-            active_head_params = []
-            head_name = getattr(self.model, '_aria_head_name', 'score')
-            wrapper = getattr(self.model, head_name, None)
-            if wrapper is not None and self.active_task_id < len(wrapper.heads):
-                active_head_params = [p for p in wrapper.heads[self.active_task_id].parameters()
-                                      if p.requires_grad]
-            exclude_ids = {id(p) for p in active_head_params}
-
-            groups = [g for g in _setup_lr_groups(self.model, self.args.learning_rate,
-                                                   self.slow_lr_ratio, exclude_ids=exclude_ids)
+            groups = [g for g in _setup_lr_groups(self.model, self.args.learning_rate, self.slow_lr_ratio)
                       if g["params"]]  # drop empty groups (backbone may be frozen)
-
-            if active_head_params:
-                groups.append({"params": active_head_params, "lr": self.args.learning_rate * head_lr_mult})
-
             # Include active task adapter parameters so the adapter actually trains
             if self.task_adapters and self.active_task_id < len(self.task_adapters):
                 adapter_params = [p for p in self.task_adapters[self.active_task_id].parameters()
                                   if p.requires_grad]
                 if adapter_params:
-                    groups.append({"params": adapter_params, "lr": self.args.learning_rate * head_lr_mult})
+                    groups.append({"params": adapter_params, "lr": self.args.learning_rate})
             if not groups:
                 # Fallback: if somehow all params are frozen, add a dummy to avoid optimizer error
                 groups = [{"params": [p for p in self.model.parameters() if p.requires_grad][:1],
@@ -383,36 +344,6 @@ class ContinualSFTTrainer(Trainer):
         spc_loss = self.spc_lambda * self.consolidator.compute_spc_loss()
         loss = loss + p_loss + spc_loss
 
-        return (loss, outputs) if return_outputs else loss
-
-
-class EWCTrainer(Trainer):
-    """Textbook EWC: plain model (no fast/slow pathway, no adapters, shared head),
-    Fisher penalty only. Isolates what ARIA-TRL's extra mechanisms add beyond
-    standard EWC by holding the Fisher penalty strength identical to aria-trl's
-    spc_lambda."""
-    def __init__(self, model, args, train_dataset, eval_dataset=None,
-                 ewc_lambda=15.0, consolidator=None, **kwargs):
-        super().__init__(model=model, args=args, train_dataset=train_dataset,
-                         eval_dataset=eval_dataset, **kwargs)
-        self.ewc_lambda = ewc_lambda
-        self.consolidator = consolidator if consolidator is not None else \
-                            FisherConsolidator(self.model, self.args.device)
-
-    def consolidate_task(self, task_id):
-        if self.eval_dataset is None:
-            return
-        print(f"  Consolidating task {task_id} (EWC)...")
-        self.consolidator.consolidate(task_id, self.get_eval_dataloader())
-        print(f"  Done.")
-
-    def compute_loss(self, model, inputs, return_outputs=False, num_items_in_batch=None):
-        kw = {"return_outputs": return_outputs}
-        if num_items_in_batch is not None:
-            kw["num_items_in_batch"] = num_items_in_batch
-        result = super().compute_loss(model, inputs, **kw)
-        loss, outputs = (result if return_outputs else (result, None))
-        loss = loss + self.ewc_lambda * self.consolidator.compute_spc_loss()
         return (loss, outputs) if return_outputs else loss
 
 
@@ -609,7 +540,7 @@ def load_fresh_model():
 
 
 def make_training_args(task_id, task, method, seed=42):
-    epochs  = 5  # equal across all three methods and both devices
+    epochs  = 5 if DEVICE == "cuda" else 2
     batch   = 16 if DEVICE == "cuda" else 32
     return TrainingArguments(
         output_dir=f"{'/kaggle/working' if os.path.exists('/kaggle') else '/tmp/aria_bm'}/ckpt_{method}_{task_id}_{task}",
@@ -654,7 +585,7 @@ def run_standard_ft(task_datasets, tok, seed):
     return acc_matrix
 
 
-def run_aria(task_datasets, tok, seed, spc_lambda=15.0):
+def run_aria(task_datasets, tok, seed):
     """Train ARIA-TRL sequentially, return accuracy matrix."""
     set_seed(seed)
     model, _ = load_fresh_model()
@@ -665,9 +596,6 @@ def run_aria(task_datasets, tok, seed, spc_lambda=15.0):
         train_ds = tokenize_dataset(task_datasets[task]["train"], tok)
         test_ds  = tokenize_dataset(task_datasets[task]["test"],  tok)
         args     = make_training_args(task_id, task, "aria", seed=seed)
-        # Warmup = one epoch's worth of steps, so gate specialization actually
-        # activates within the training run instead of never triggering.
-        steps_per_epoch = -(-len(train_ds) // args.per_device_train_batch_size)  # ceil div
 
         # New Trainer per task (avoids Accelerate state reset bug on re-use),
         # but consolidator is passed in so SPC Fisher data persists.
@@ -678,10 +606,10 @@ def run_aria(task_datasets, tok, seed, spc_lambda=15.0):
             eval_dataset=test_ds,
             tokenizer=tok,
             plasticity_lambda=0.001,
-            spc_lambda=spc_lambda,
+            spc_lambda=15.0,
             adapter_dim=64,
-            slow_lr_ratio=1.0,
-            warmup_steps=steps_per_epoch,
+            slow_lr_ratio=0.5,
+            warmup_steps=100,
             consolidator=consolidator,
         )
         trainer.add_task(task_id)
@@ -708,41 +636,6 @@ def run_aria(task_datasets, tok, seed, spc_lambda=15.0):
     return acc_matrix
 
 
-def run_ewc(task_datasets, tok, seed):
-    """Train with standard (textbook) EWC sequentially, return accuracy matrix."""
-    set_seed(seed)
-    model, _ = load_fresh_model()
-    acc_matrix = {}
-    consolidator = None  # passed forward so Fisher state persists across tasks
-
-    for task_id, task in enumerate(TASKS):
-        train_ds = tokenize_dataset(task_datasets[task]["train"], tok)
-        test_ds  = tokenize_dataset(task_datasets[task]["test"],  tok)
-        args     = make_training_args(task_id, task, "ewc", seed=seed)
-
-        trainer = EWCTrainer(
-            model=model, args=args,
-            train_dataset=train_ds,
-            eval_dataset=test_ds,
-            ewc_lambda=15.0,  # matches aria-trl's spc_lambda for a fair comparison
-            consolidator=consolidator,
-        )
-        trainer.train()
-
-        if task_id < len(TASKS) - 1:
-            trainer.consolidate_task(task_id)
-        consolidator = trainer.consolidator
-
-        acc_matrix[task_id] = {}
-        for prev_id, prev_task in enumerate(TASKS):
-            if prev_id > task_id:
-                break
-            test_ds_prev = tokenize_dataset(task_datasets[prev_task]["test"], tok)
-            acc_matrix[task_id][prev_id] = direct_eval(model, test_ds_prev, DEVICE)
-
-    return acc_matrix
-
-
 # ─────────────────────────────────────────────
 # Main
 # ─────────────────────────────────────────────
@@ -757,97 +650,53 @@ def main():
 
     T = len(TASKS)
 
-    methods = {
-        "standard_ft": run_standard_ft,
-        "ewc":         run_ewc,
-        "aria_trl":    run_aria,
-    }
-    method_labels = {"standard_ft": "Standard FT", "ewc": "EWC", "aria_trl": "ARIA-TRL"}
-    accs = {m: [] for m in methods}
-    bwts = {m: [] for m in methods}
-    per_seed_matrices = {m: {} for m in methods}
+    stdft_accs, stdft_bwts = [], []
+    aria_accs,  aria_bwts  = [], []
 
     for seed in SEEDS:
         print(f"\n{'='*70}")
         print(f"SEED {seed}")
         print(f"{'='*70}")
 
-        for m, run_fn in methods.items():
-            print(f"\n--- {method_labels[m]} ---")
-            matrix = run_fn(task_datasets, tok, seed)
-            acc = avg_accuracy(matrix, T)
-            bw  = bwt(matrix, T)
-            accs[m].append(acc)
-            bwts[m].append(bw)
-            per_seed_matrices[m][seed] = matrix
-            print(f"  {method_labels[m]:<12} ACC={acc:.4f}  BWT={bw:.4f}")
-            for t in range(T):
-                row = " | ".join(f"{matrix[t].get(j, float('nan')):.3f}" for j in range(T))
-                print(f"  After task {t} ({TASK_NAMES[t]}): {row}")
+        print("\n--- Standard FT ---")
+        sf_matrix = run_standard_ft(task_datasets, tok, seed)
+        sf_acc = avg_accuracy(sf_matrix, T)
+        sf_bwt = bwt(sf_matrix, T)
+        stdft_accs.append(sf_acc)
+        stdft_bwts.append(sf_bwt)
+        print(f"  Standard FT  ACC={sf_acc:.4f}  BWT={sf_bwt:.4f}")
+        for t in range(T):
+            row = " | ".join(f"{sf_matrix[t].get(j, float('nan')):.3f}" for j in range(T))
+            print(f"  After task {t} ({TASK_NAMES[t]}): {row}")
+
+        print("\n--- ARIA-TRL ---")
+        ar_matrix = run_aria(task_datasets, tok, seed)
+        ar_acc = avg_accuracy(ar_matrix, T)
+        ar_bwt = bwt(ar_matrix, T)
+        aria_accs.append(ar_acc)
+        aria_bwts.append(ar_bwt)
+        print(f"  ARIA-TRL     ACC={ar_acc:.4f}  BWT={ar_bwt:.4f}")
+        for t in range(T):
+            row = " | ".join(f"{ar_matrix[t].get(j, float('nan')):.3f}" for j in range(T))
+            print(f"  After task {t} ({TASK_NAMES[t]}): {row}")
 
     print("\n" + "="*70)
     print("FINAL RESULTS (mean ± std over 3 seeds)")
     print("="*70)
     print(f"{'Method':<15} {'Avg Accuracy':>14} {'Backward Transfer':>18}")
     print("-"*50)
-    for m in methods:
-        print(f"{method_labels[m]:<15} {np.mean(accs[m]):>8.4f} ± {np.std(accs[m]):.4f}"
-              f"   {np.mean(bwts[m]):>8.4f} ± {np.std(bwts[m]):.4f}")
+    print(f"{'Standard FT':<15} {np.mean(stdft_accs):>8.4f} ± {np.std(stdft_accs):.4f}"
+          f"   {np.mean(stdft_bwts):>8.4f} ± {np.std(stdft_bwts):.4f}")
+    print(f"{'ARIA-TRL':<15} {np.mean(aria_accs):>8.4f} ± {np.std(aria_accs):.4f}"
+          f"   {np.mean(aria_bwts):>8.4f} ± {np.std(aria_bwts):.4f}")
     print()
 
-    acc_delta_ewc  = np.mean(accs["aria_trl"]) - np.mean(accs["ewc"])
-    bwt_delta_ewc  = np.mean(bwts["aria_trl"]) - np.mean(bwts["ewc"])
-    acc_delta_stdft = np.mean(accs["aria_trl"]) - np.mean(accs["standard_ft"])
-    bwt_delta_stdft = np.mean(bwts["aria_trl"]) - np.mean(bwts["standard_ft"])
+    acc_delta = np.mean(aria_accs) - np.mean(stdft_accs)
+    bwt_delta = np.mean(aria_bwts) - np.mean(stdft_bwts)
 
-    print(f"ARIA-TRL vs Standard FT — ACC delta: {acc_delta_stdft:+.4f}  BWT delta: {bwt_delta_stdft:+.4f}")
-    print(f"ARIA-TRL vs EWC         — ACC delta: {acc_delta_ewc:+.4f}  BWT delta: {bwt_delta_ewc:+.4f}")
+    print(f"ACC delta:  {acc_delta:+.4f}  ({'ARIA wins' if acc_delta > 0 else 'Standard FT wins'})")
+    print(f"BWT delta:  {bwt_delta:+.4f}  ({'ARIA forgets less' if bwt_delta > 0 else 'Standard FT forgets less'})")
     print("="*70)
-
-    # ── Save results to JSON ──────────────────────────────────────────────────
-    import json
-    results = {
-        "benchmark": "Sequential Domain Sentiment Benchmark",
-        "description": "3-task continual learning: SST-2 -> Yelp Reviews -> Emotion",
-        "model": MODEL_NAME,
-        "datasets": ["stanfordnlp/sst2", "Yelp/yelp_review_full", "dair-ai/emotion"],
-        "task_names": TASK_NAMES,
-        "seeds": SEEDS,
-        "train_size": TRAIN_SIZE,
-        "test_size": TEST_SIZE,
-        "methods_compared": list(methods.keys()),
-        "per_seed_results": {},
-        "final_summary": {},
-    }
-    for seed in SEEDS:
-        results["per_seed_results"][f"seed_{seed}"] = {}
-        for m in methods:
-            matrix = per_seed_matrices[m][seed]
-            results["per_seed_results"][f"seed_{seed}"][m] = {
-                "acc_matrix": {
-                    f"after_task_{t}": [matrix[t].get(j) for j in range(t + 1)]
-                    for t in range(T)
-                },
-                "ACC": round(avg_accuracy(matrix, T), 4),
-                "BWT": round(bwt(matrix, T), 4),
-            }
-    for m in methods:
-        results["final_summary"][m] = {
-            "ACC_mean": round(float(np.mean(accs[m])), 4),
-            "ACC_std":  round(float(np.std(accs[m])), 4),
-            "BWT_mean": round(float(np.mean(bwts[m])), 4),
-            "BWT_std":  round(float(np.std(bwts[m])), 4),
-        }
-    results["final_summary"]["deltas"] = {
-        "aria_vs_standard_ft": {"ACC_delta": round(float(acc_delta_stdft), 4), "BWT_delta": round(float(bwt_delta_stdft), 4)},
-        "aria_vs_ewc":         {"ACC_delta": round(float(acc_delta_ewc), 4),   "BWT_delta": round(float(bwt_delta_ewc), 4)},
-    }
-
-    out_dir = "results" if os.path.isdir("results") else "."
-    out_path = os.path.join(out_dir, "kaggle_benchmark_results_3way.json")
-    with open(out_path, "w") as f:
-        json.dump(results, f, indent=2)
-    print(f"\nSaved results to {out_path}")
 
 
 if __name__ == "__main__":

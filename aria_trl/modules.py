@@ -1,5 +1,6 @@
 """ARIA modules: PlasticityGatedMLP and TaskFastAdapter."""
 
+from typing import Tuple
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
@@ -26,7 +27,6 @@ class PlasticityGatedMLP(nn.Module):
         plasticity_lambda: float = 0.01,
         warmup_steps: int = 500,
         dropout: float = 0.1,
-        activation=None,
     ):
         """
         Args:
@@ -35,11 +35,6 @@ class PlasticityGatedMLP(nn.Module):
             plasticity_lambda: Weight for specialization loss
             warmup_steps: Steps before plasticity loss activates
             dropout: Dropout rate
-            activation: Activation function to use in both pathways. Pass
-                the original FFN's activation (e.g. GPT-2's gelu_new) when
-                replacing a pretrained block — defaulting to plain F.gelu
-                here would silently mismatch what the pretrained weights
-                being copied in were actually trained with.
         """
         super().__init__()
 
@@ -64,10 +59,10 @@ class PlasticityGatedMLP(nn.Module):
         self.warmup_steps = warmup_steps
         self.mean_gate = 0.5
         self.step = 0
-        self.last_plasticity_loss = torch.tensor(0.0)
-        self.act = activation if activation is not None else F.gelu
 
-    def forward(self, x: torch.Tensor, force_slow: bool = False) -> torch.Tensor:
+    def forward(
+        self, x: torch.Tensor, force_slow: bool = False
+    ) -> Tuple[torch.Tensor, torch.Tensor]:
         """
         Args:
             x: Input tensor (batch, seq_len, d_model)
@@ -75,10 +70,7 @@ class PlasticityGatedMLP(nn.Module):
 
         Returns:
             output: (batch, seq_len, d_model)
-
-        The bimodal specialization loss for this forward pass is stored in
-        self.last_plasticity_loss, since drop-in MLP replacement requires a
-        single-tensor return matching the original module's call site.
+            plasticity_loss: scalar tensor
         """
         if force_slow:
             # Old task at eval: use only consolidated slow pathway
@@ -89,8 +81,8 @@ class PlasticityGatedMLP(nn.Module):
         self.mean_gate = float(π.detach().mean().item())
 
         # Dual pathways
-        h_fast = self.act(self.fast_in(x))
-        h_slow = self.act(self.slow_in(x))
+        h_fast = F.gelu(self.fast_in(x))
+        h_slow = F.gelu(self.slow_in(x))
 
         # Route by gate
         out = π * self.fast_out(h_fast) + (1 - π) * self.slow_out(h_slow)
@@ -98,12 +90,12 @@ class PlasticityGatedMLP(nn.Module):
 
         # Plasticity loss: bimodal specialization (push π toward 0 or 1)
         if self.step >= self.warmup_steps:
-            self.last_plasticity_loss = self.plasticity_lambda / (π * (1 - π) + 1e-4).mean()
+            p_loss = self.plasticity_lambda / (π * (1 - π) + 1e-4).mean()
         else:
-            self.last_plasticity_loss = torch.tensor(0.0, device=x.device, dtype=x.dtype)
+            p_loss = torch.tensor(0.0, device=x.device, dtype=x.dtype)
 
         self.step += 1
-        return out
+        return out, p_loss
 
     def slow_parameters(self):
         """Return all slow-pathway parameters."""
@@ -173,28 +165,3 @@ class TaskFastAdapter(nn.Module):
         """Unfreeze adapter parameters."""
         for param in self.parameters():
             param.requires_grad_(True)
-
-
-class MultiHeadScoreWrapper(nn.Module):
-    """
-    Routes the forward pass to the active task's classification head.
-
-    A single shared head is a second forgetting vector independent of the
-    backbone: training task 2 overwrites task 1's decision boundary even if
-    the backbone itself is perfectly preserved. This wrapper gives each task
-    its own head, selected via a shared mutable state dict (so it stays in
-    sync with whatever else reads/writes active_task_id, e.g. the adapter
-    hook) rather than a plain instance attribute.
-    """
-
-    def __init__(self, state: dict):
-        super().__init__()
-        self.heads = nn.ModuleList()
-        self.state = state  # shared with the owning trainer, e.g. {"active_task_id": 0}
-
-    def add_head(self, head: nn.Module):
-        self.heads.append(head)
-
-    def forward(self, x: torch.Tensor) -> torch.Tensor:
-        task_id = min(self.state["active_task_id"], len(self.heads) - 1)
-        return self.heads[task_id](x)

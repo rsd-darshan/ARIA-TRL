@@ -29,29 +29,15 @@ class FisherConsolidator:
         self.task_means: List[Dict[str, torch.Tensor]] = []
         self.task_fishers: List[Dict[str, torch.Tensor]] = []
 
-    def _protected_params(self):
-        """
-        Yield (name, param) for every backbone parameter worth protecting.
-
-        This is deliberately *not* slow-pathway-only. Fast/slow separation
-        only prevents forgetting if the parts of the model outside the FFN
-        (attention, LayerNorm, embeddings) are also protected — leaving them
-        fully trainable lets task N+1 shift task N's hidden representations
-        even with every slow-pathway weight provably unchanged. The one
-        thing excluded is the fast pathway itself: it must stay free to
-        adapt each task, or fast/slow degenerates into "slow pathway
-        trained at half speed," which is worse than plain EWC at learning
-        new tasks.
-        """
-        fast_param_ids = set()
-        for module in self.model.modules():
-            if hasattr(module, "fast_in") and hasattr(module, "fast_out"):
-                fast_param_ids.update(id(p) for p in module.fast_in.parameters())
-                fast_param_ids.update(id(p) for p in module.fast_out.parameters())
-        for name, param in self.model.named_parameters():
-            if id(param) in fast_param_ids:
-                continue
-            yield name, param
+    def _get_slow_named_parameters(self):
+        """Iterate over slow-pathway parameters (from PlasticityGatedMLP layers)."""
+        for name, module in self.model.named_modules():
+            if hasattr(module, "slow_parameters"):
+                # This is a PlasticityGatedMLP
+                for i, param in enumerate(module.slow_parameters()):
+                    # Create unique name for this slow param
+                    param_name = f"{name}.slow_param_{i}"
+                    yield param_name, param
 
     def consolidate(
         self,
@@ -72,7 +58,7 @@ class FisherConsolidator:
         # Initialize storage
         means = {}
         fishers = {}
-        for name, param in self._protected_params():
+        for name, param in self._get_slow_named_parameters():
             means[name] = param.detach().cpu().clone()
             fishers[name] = torch.zeros_like(param, device="cpu")
 
@@ -85,12 +71,6 @@ class FisherConsolidator:
             # Handle different input formats
             if isinstance(batch, dict):
                 batch = {k: v.to(self.device) for k, v in batch.items()}
-                # HF datasets commonly use "label" (singular); the model's
-                # forward expects "labels" to compute loss internally. Without
-                # this rename, loss silently comes back None and Fisher stays
-                # all-zero for the entire consolidation call.
-                if "label" in batch and "labels" not in batch:
-                    batch["labels"] = batch.pop("label")
             else:
                 batch = batch[0].to(self.device), batch[1].to(self.device)
 
@@ -104,21 +84,20 @@ class FisherConsolidator:
                 outputs = self.model(input_ids=input_ids, labels=labels)
 
             # Compute loss for backward
-            if hasattr(outputs, "loss") and outputs.loss is not None:
+            if hasattr(outputs, "loss"):
                 loss = outputs.loss
             else:
                 # Fallback if loss not in output
                 logits = outputs.logits if hasattr(outputs, "logits") else outputs[0]
-                target = batch["labels"] if isinstance(batch, dict) else batch[1]
                 loss = nn.functional.cross_entropy(
                     logits.view(-1, logits.size(-1)),
-                    target.view(-1),
+                    batch[1].view(-1),
                 )
 
             loss.backward()
 
             # Accumulate squared gradients (diagonal Fisher)
-            for name, param in self._protected_params():
+            for name, param in self._get_slow_named_parameters():
                 if param.grad is not None:
                     fishers[name] += param.grad.data.cpu() ** 2
 
@@ -152,8 +131,8 @@ class FisherConsolidator:
         spc_loss = torch.tensor(0.0, device=self.device)
 
         for means, fishers in zip(self.task_means, self.task_fishers):
-            for name, param in self._protected_params():
-                if name in means and name in fishers and param.requires_grad:
+            for name, param in self._get_slow_named_parameters():
+                if name in means and name in fishers:
                     mean = means[name].to(self.device)
                     fisher = fishers[name].to(self.device)
 
