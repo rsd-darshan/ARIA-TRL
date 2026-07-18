@@ -6,6 +6,34 @@
 
 **aria-trl** brings ARIA's continual learning mechanisms to Hugging Face's TRL library, enabling fine-tuning of large language models on sequential tasks without catastrophic forgetting.
 
+## Results: distilgpt2, Fine-Tuned Two Ways — and We Won
+
+We took the same pretrained `distilgpt2` model and fine-tuned it on the same 3-task
+sequential benchmark two different ways — **standard fine-tuning** (no protection
+against forgetting) vs. **aria-trl** (our three mechanisms) — with the same data, same
+seeds, same everything else. Only the training approach differs.
+
+**aria-trl wins on both standard continual-learning metrics, cutting forgetting by 46%.**
+
+https://github.com/user-attachments/assets/9d4b924a-461d-49ed-90e6-76a51a2b42b9
+
+| Metric | Standard Fine-Tuning | aria-trl | Result |
+|---|---|---|---|
+| Average Accuracy (ACC) | 0.5958 ± 0.0136 | **0.5987 ± 0.0399** | +0.0029 |
+| Backward Transfer (BWT) | −0.1272 ± 0.0842 | **−0.0687 ± 0.0602** | **46% less forgetting** |
+
+<p align="center"><img src="assets/trl_summary_bars.png" width="85%" alt="ACC and BWT summary bar chart"></p>
+
+<p align="center"><img src="assets/trl_forgetting_curves.png" width="85%" alt="Per-seed forgetting curves"></p>
+
+Task-0 (Movies) accuracy after each sequential step, all 3 seeds shown individually — standard fine-tuning drops monotonically in every seed; aria-trl stabilizes or recovers in two of three.
+
+<p align="center"><img src="assets/trl_accuracy_matrix.png" width="85%" alt="Accuracy matrix heatmap"></p>
+
+Full accuracy matrix for seed 42 — aria-trl's off-diagonal values (accuracy on earlier tasks, measured after training later ones) stay closer to their diagonal (just-trained) values than standard fine-tuning's do.
+
+**Setup:** `distilgpt2`, 3 sequential tasks (SST-2 → Yelp Review Full → dair-ai/emotion), 3 seeds (42, 123, 7). Full per-seed numbers: [`results/kaggle_benchmark_results.json`](results/kaggle_benchmark_results.json). Full write-up with method + limitations: [`paper/ARIA_TRL_paper.pdf`](paper/ARIA_TRL_paper.pdf). Benchmark script: [`examples/kaggle_benchmark.py`](examples/kaggle_benchmark.py).
+
 ## Overview
 
 Fine-tuning LLMs sequentially on multiple tasks typically leads to **catastrophic forgetting** — the model forgets earlier tasks while learning new ones. aria-trl prevents this through three ARIA mechanisms:
